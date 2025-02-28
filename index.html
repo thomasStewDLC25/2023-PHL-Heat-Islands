@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Vulnerability Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+
+    <style>
+        #map { height: 600px; width: 100%; }
+        .legend { 
+            background: white; 
+            padding: 6px 10px; 
+            line-height: 14px; 
+            border-radius: 5px; 
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3); 
+            font-size: 12px;
+        }
+        .legend i { 
+            width: 14px; 
+            height: 14px; 
+            float: left; 
+            margin-right: 6px; 
+            opacity: 0.7; 
+        }
+        .legend-title { 
+            font-weight: bold; 
+            font-size: 13px; 
+            display: block; 
+            text-align: center; 
+            margin-bottom: 3px; 
+        }
+        #map-title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .legend span {
+            display: inline-block;
+            width: 70px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map-title">Philadelphia's 2023 Heat Vulnerability Map</div>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([39.9526, -75.1652], 12);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors, © CARTO'
+        }).addTo(map);
+
+        Promise.all([
+            fetch('heat_vulnerability_ct.geojson').then(response => response.json()),
+            fetch('philadelphia-neighborhoods.geojson').then(response => response.json()),
+            fetch('heat_vulnerability_ct.csv').then(response => response.text())
+        ]).then(([geojson, neighborhoodsGeoJson, csvData]) => {
+            const heatVulnerabilityData = Papa.parse(csvData, { header: true, skipEmptyLines: true }).data;
+
+            geojson.features.forEach(feature => {
+                const geoid10 = feature.properties.geoid10;
+                const heatData = heatVulnerabilityData.find(row => row.geoid10 === geoid10);
+                feature.properties.hvi_score = heatData ? parseFloat(heatData.hvi_score) : null;
+
+                const neighborhood = findNeighborhoodForFeature(feature, neighborhoodsGeoJson);
+                if (neighborhood) {
+                    feature.properties.neighborhood = neighborhood;
+                }
+            });
+
+            function findNeighborhoodForFeature(feature, neighborhoodsGeoJson) {
+                for (const neighborhood of neighborhoodsGeoJson.features) {
+                    if (turf.booleanIntersects(feature, neighborhood)) {
+                        return neighborhood.properties.NAME;
+                    }
+                }
+                return 'Unknown';
+            }
+
+            function getColor(d) {
+                if (isNaN(d) || d === null || d === undefined) {
+                    return '#ffffff';
+                }
+                return d > 6 ? '#a50026' :
+                       d > 4 ? '#d73027' :
+                       d > 2 ? '#f46d43' :
+                       d > -2 ? '#fdae61' :
+                       d > -4 ? '#fee6ce' :
+                       d > -6 ? '#fcbba1' :
+                                '#fdd0c3';
+            }
+
+            L.geoJson(geojson, {
+                style: function(feature) {
+                    return {
+                        fillColor: getColor(feature.properties.hvi_score),
+                        weight: 1,
+                        color: 'black',
+                        fillOpacity: feature.properties.hvi_score !== null ? 0.7 : 0
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    var hviScore = feature.properties.hvi_score !== null ? feature.properties.hvi_score.toFixed(1) : 'N/A';
+                    layer.bindTooltip(`
+                        <b>Census Tract:</b> ${feature.properties.geoid10}<br>
+                        <b>HVI Score:</b> ${hviScore}<br>
+                        <b>Neighborhood:</b> ${feature.properties.neighborhood || 'Unknown'}
+                    `);
+                }
+            }).addTo(map);
+
+            var legend = L.control({ position: 'bottomright' });
+            legend.onAdd = function () {
+                var div = L.DomUtil.create('div', 'info legend');
+                div.innerHTML += '<span class="legend-title">Heat Vulnerability Index Score</span>';
+                var grades = [-8, -6, -4, -2, 2, 4, 6, 8];
+
+                for (var i = 0; i < grades.length - 1; i++) { 
+                    div.innerHTML +=
+                        '<br><i style="background:' + getColor(grades[i]) + '"></i> ' +
+                        '<span>' + grades[i].toFixed(1) + ' – ' + grades[i + 1].toFixed(1) + '</span>';
+                }
+
+                return div;
+            };
+            legend.addTo(map);
+
+            // Add scale bar at the bottom left of the map
+            L.control.scale({ position: 'bottomleft', metric: true, imperial: false }).addTo(map);
+        });
+    </script>
+</body>
+</html>
