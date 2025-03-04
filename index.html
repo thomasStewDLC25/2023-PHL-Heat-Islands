@@ -43,11 +43,34 @@
             display: inline-block;
             width: 70px;
         }
+        /* Caption Style */
+        #caption {
+            position: fixed;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            font-size: 12px;
+            font-family: Arial, sans-serif;
+            border-radius: 5px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+        #caption a {
+            color: blue;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
     <div id="map-title">Philadelphia's 2023 Heat Vulnerability Map</div>
     <div id="map"></div>
+
+    <!-- Caption -->
+    <div id="caption">
+        Data compiled with <a href="https://www.opendataphilly.org" target="_blank">OpenDataPhilly.org</a>
+    </div>
 
     <script>
         var map = L.map('map').setView([39.9526, -75.1652], 12);
@@ -56,7 +79,7 @@
             attribution: '© OpenStreetMap contributors, © CARTO'
         }).addTo(map);
 
-        Promise.all([
+        Promise.all([ 
             fetch('heat_vulnerability_ct.geojson').then(response => response.json()),
             fetch('philadelphia-neighborhoods.geojson').then(response => response.json()),
             fetch('heat_vulnerability_ct.csv').then(response => response.text())
@@ -107,7 +130,7 @@
                 },
                 onEachFeature: function(feature, layer) {
                     var hviScore = feature.properties.hvi_score !== null ? feature.properties.hvi_score.toFixed(1) : 'N/A';
-                    layer.bindTooltip(`
+                    layer.bindTooltip(` 
                         <b>Census Tract:</b> ${feature.properties.geoid10}<br>
                         <b>HVI Score:</b> ${hviScore}<br>
                         <b>Neighborhood:</b> ${feature.properties.neighborhood || 'Unknown'}
